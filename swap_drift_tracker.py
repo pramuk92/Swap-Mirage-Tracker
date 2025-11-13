@@ -76,19 +76,114 @@ def analyze_carry_implications(rate_differential, pair):
             "Trading Context": "Technical analysis and other macro factors dominate"
         }
 
-# Risk sentiment classification for pairs
-risk_sentiment_pairs = {
-    "High Risk Appetite (Carry Trades)": ["AUD/JPY", "NZD/JPY", "EUR/AUD", "GBP/AUD", "AUD/NZD"],
-    "Risk Off (Safe Havens)": ["USD/JPY", "USD/CHF", "JPY pairs"],
-    "Moderate Risk": ["EUR/USD", "GBP/USD", "USD/CAD", "EUR/GBP"]
-}
+# Strategic watchlist creation
+def create_strategic_watchlist(rates_dict):
+    """
+    Create categorized watchlist for systematic trading
+    """
+    watchlist = {
+        "Primary Carry Trades": [],
+        "Secondary Carry Trades": [], 
+        "Risk-Off Hedges": [],
+        "Neutral Pairs": []
+    }
+    
+    for pair in VALID_PAIRS:
+        base, quote = pair.split('/')
+        if base in rates_dict and quote in rates_dict:
+            diff = rates_dict[base] - rates_dict[quote]
+            
+            if diff > 2.0:  # Strong positive carry
+                watchlist["Primary Carry Trades"].append({
+                    "pair": pair,
+                    "diff": diff,
+                    "direction": "LONG",
+                    "rationale": "High yield, strong trend potential",
+                    "entry_strategy": "Buy pullbacks to daily support during risk-on"
+                })
+            elif diff > 0.5:  # Moderate carry
+                watchlist["Secondary Carry Trades"].append({
+                    "pair": pair, 
+                    "diff": diff,
+                    "direction": "LONG",
+                    "rationale": "Moderate yield, good risk-reward",
+                    "entry_strategy": "Buy technical breakouts with risk-on confirmation"
+                })
+            elif diff < -1.0:  # Negative carry (risk-off)
+                watchlist["Risk-Off Hedges"].append({
+                    "pair": pair,
+                    "diff": diff, 
+                    "direction": "SHORT" if diff > 0 else "LONG",
+                    "rationale": "Safe haven, buy during stress",
+                    "entry_strategy": "Buy during VIX spikes and risk-off events"
+                })
+            else:  # Neutral
+                watchlist["Neutral Pairs"].append({
+                    "pair": pair,
+                    "diff": diff,
+                    "direction": "NEUTRAL", 
+                    "rationale": "Carry neutral, trade technically",
+                    "entry_strategy": "Pure technical analysis, range trading"
+                })
+    
+    # Sort each category by absolute differential
+    for category in watchlist:
+        watchlist[category].sort(key=lambda x: abs(x['diff']), reverse=True)
+    
+    return watchlist
 
-st.set_page_config(page_title="Carry Drift Tracker", page_icon="💱", layout="wide")
+# Entry rules for different pair types
+def get_entry_rules(pair_type, pair_info):
+    """
+    Get specific entry rules for each pair type
+    """
+    rules = {
+        "Primary Carry Trades": {
+            "Timeframe": "Daily + 4HR confluence",
+            "Entry Signal": "Pullback to 50-day EMA with bullish reversal",
+            "Confirmation": "RSI (40-50) bounce, risk-on environment (VIX < 20)",
+            "Stop Loss": "Below recent swing low (1-2% risk)",
+            "Target": "Previous highs + 2:1 risk-reward",
+            "Position Size": "1-2% account risk",
+            "Management": "Trail stop to breakeven at +1%, partial profits at 1.5R"
+        },
+        "Secondary Carry Trades": {
+            "Timeframe": "4HR + Daily alignment",
+            "Entry Signal": "Break above consolidation with volume",
+            "Confirmation": "MACD crossover, risk-on confirmation",
+            "Stop Loss": "Below support level",
+            "Target": "1.5:1 to 2:1 risk-reward", 
+            "Position Size": "1% account risk",
+            "Management": "Take partial profits at 1R, trail remainder"
+        },
+        "Risk-Off Hedges": {
+            "Timeframe": "Daily + Weekly for timing",
+            "Entry Signal": "VIX spike above 25, safe haven flows",
+            "Confirmation": "Price breaking key resistance with momentum",
+            "Stop Loss": "Wider stops (2-3%) due to volatility",
+            "Target": "Quick 2-5% moves during panic",
+            "Position Size": "0.5-1% account risk",
+            "Management": "Quick profits, don't get greedy"
+        },
+        "Neutral Pairs": {
+            "Timeframe": "4HR for entries",
+            "Entry Signal": "Range breakout or bounce",
+            "Confirmation": "Stochastic oversold/overbought reversals", 
+            "Stop Loss": "Beyond range boundaries",
+            "Target": "Opposite side of range",
+            "Position Size": "1% account risk",
+            "Management": "Range trading mentality"
+        }
+    }
+    
+    return rules.get(pair_type, {})
+
+st.set_page_config(page_title="Advanced Carry Drift Tracker", page_icon="💱", layout="wide")
 
 st.title("💱 Advanced Carry Drift Tracker")
 st.markdown("""
 This tool helps identify favorable currency pairs for carry trades based on interest rate differentials,
-including analysis of trend implications and market behavior patterns.
+including systematic trading strategies and risk management frameworks.
 """)
 
 # Sample data for user reference
@@ -110,6 +205,7 @@ min_differential = st.number_input("Minimum Rate Differential (%)",
                                  min_value=0.0, max_value=10.0, value=0.1, step=0.1)
 
 show_analysis = st.checkbox("Show Detailed Trend Analysis", value=True)
+show_strategy = st.checkbox("Show Systematic Trading Strategy", value=True)
 
 if st.button("🔍 Analyse", type="primary"):
     if not raw_input.strip():
@@ -287,6 +383,70 @@ if st.button("🔍 Analyse", type="primary"):
                                     else:
                                         st.warning("Funding currency - can spike during risk-off events")
                 
+                # Systematic Trading Strategy Section
+                if show_strategy:
+                    st.subheader("🎯 Systematic Trading Strategy")
+                    
+                    # Create strategic watchlist
+                    watchlist = create_strategic_watchlist(rates_dict)
+                    
+                    # Display market regime guidance
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**📈 Risk-On Strategy (VIX < 20)**")
+                        st.markdown("""
+                        **Primary Actions:**
+                        - Focus on LONG Primary Carry Trades
+                        - Enter on pullbacks to daily support
+                        - Use 4HR/Daily confluence for timing
+                        
+                        **Entry Example (USD/JPY):**
+                        1. Wait for pullback to 50-day EMA
+                        2. Bullish reversal candle pattern
+                        3. RSI bounce from 40-50 zone
+                        4. Enter with 1-2% stop loss
+                        """)
+                    
+                    with col2: 
+                        st.markdown("**📉 Risk-Off Strategy (VIX > 25)**")
+                        st.markdown("""
+                        **Defensive Actions:**
+                        - Reduce carry trade exposure
+                        - Consider Risk-Off Hedges
+                        - Move to safe havens
+                        
+                        **Risk Management:**
+                        - Tighten stops on carry trades
+                        - Monitor correlation breakdowns  
+                        - Prepare for violent reversals
+                        """)
+                    
+                    # Display strategic watchlist with trading rules
+                    st.markdown("**📋 Strategic Trading Watchlist**")
+                    
+                    for category, pairs in watchlist.items():
+                        if pairs:  # Only show non-empty categories
+                            with st.expander(f"**{category}** ({len(pairs)} pairs)", expanded=category=="Primary Carry Trades"):
+                                for pair_info in pairs:
+                                    st.markdown(f"**{pair_info['pair']}** - {pair_info['diff']:.2f}% differential")
+                                    
+                                    col1, col2 = st.columns([1, 2])
+                                    with col1:
+                                        st.write(f"**Direction:** {pair_info['direction']}")
+                                        st.write(f"**Rationale:** {pair_info['rationale']}")
+                                    with col2:
+                                        st.write(f"**Entry Strategy:** {pair_info['entry_strategy']}")
+                                    
+                                    # Show detailed trading rules
+                                    rules = get_entry_rules(category, pair_info)
+                                    if rules:
+                                        with st.expander("Detailed Trading Rules"):
+                                            for rule_name, rule_value in rules.items():
+                                                st.write(f"**{rule_name}:** {rule_value}")
+                                    
+                                    st.markdown("---")
+                
                 # Summary statistics
                 st.subheader("📊 Summary")
                 col1, col2, col3, col4 = st.columns(4)
@@ -313,27 +473,29 @@ if st.button("🔍 Analyse", type="primary"):
 # Enhanced Footer with Trading Education
 st.markdown("---")
 st.markdown("""
-**🎓 Carry Trade Educational Guide**
+**🎓 Advanced Carry Trade Educational Guide**
 
-**💡 Key Concepts:**
-- **Carry Trade**: Borrow low-yield currency, invest in high-yield currency
-- **Risk-On**: Carry trades perform well (high-yield currencies appreciate)  
-- **Risk-Off**: Carry trades unwind violently (high-yield currencies crash)
+**💡 Systematic Trading Framework:**
+- **Market Regime First**: Always assess risk-on/risk-off environment
+- **Watchlist Categorization**: Trade Primary carries in risk-on, hedges in risk-off  
+- **Multi-Timeframe**: Daily bias + 4HR entries for optimal timing
+- **Risk Management**: 1-2% risk per trade, proper position sizing
 
-**📊 Risk Sentiment Indicators to Monitor:**
-- **VIX Index** (Fear Gauge) - above 20 = caution for carry trades
-- **Equity Markets** - rising stocks = favorable for carry
-- **Bond Yield Spreads** - widening = stronger carry momentum
-- **Central Bank Guidance** - future rate expectations matter most
+**📊 Key Risk Sentiment Indicators:**
+- **VIX Index**: <20 = risk-on, >25 = risk-off
+- **SP500 Trend**: Above 200MA = favorable for carry
+- **AUD/JPY Correlation**: Rising = risk-on, falling = risk-off
+- **Treasury Yields**: Steepening = risk-on, flattening = caution
 
-**⚡ Trading Implications:**
-- **Large Differentials (>2%)**: Strong trends but high reversal risk
-- **Moderate Differentials (0.5-2%)**: Good balance of carry and manageable risk
-- **Small Differentials (<0.5%)**: Carry has minimal influence on price action
+**⚡ Trading Psychology:**
+- **Patience**: Carry trades develop over weeks/months
+- **Discipline**: Stick to entry rules, don't chase moves
+- **Flexibility**: Adapt to changing market regimes
+- **Risk Awareness**: Know when carry trades are dangerous
 
-**🔍 Always Remember:**
-- Verify actual swap rates with your broker
-- Carry trades work until they don't - then they reverse fast
-- Use proper position sizing and risk management
-- Monitor overall market sentiment and economic conditions
+**🔍 Always Verify:**
+- Actual swap rates with your broker
+- Current market sentiment and correlations
+- Central bank policy expectations
+- Technical alignment with fundamental bias
 """)
