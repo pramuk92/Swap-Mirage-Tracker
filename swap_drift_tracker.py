@@ -1,9 +1,8 @@
 import streamlit as st
 import re
 import pandas as pd
-from itertools import combinations
 
-# Mapping central banks to currency codes (expanded with more common pairs)
+# Mapping central banks to currency codes
 bank_to_currency = {
     "Federal Reserve": "USD",
     "European Central Bank": "EUR", 
@@ -15,7 +14,7 @@ bank_to_currency = {
     "Swiss National Bank": "CHF"
 }
 
-# Define valid forex pairs (you can expand this list)
+# Define valid forex pairs
 VALID_PAIRS = [
     'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
     'EUR/GBP', 'EUR/JPY', 'EUR/CHF', 'EUR/AUD', 'EUR/CAD', 'EUR/NZD',
@@ -48,12 +47,8 @@ raw_input = st.text_area("Paste Interest Rate Table Here", height=200, placehold
 
 # Additional options
 st.subheader("⚙️ Options")
-col1, col2 = st.columns(2)
-with col1:
-    min_differential = st.number_input("Minimum Rate Differential (%)", 
-                                     min_value=0.0, max_value=10.0, value=0.1, step=0.1)
-with col2:
-    show_all_pairs = st.checkbox("Show all valid pairs", value=True)
+min_differential = st.number_input("Minimum Rate Differential (%)", 
+                                 min_value=0.0, max_value=10.0, value=0.1, step=0.1)
 
 if st.button("🔍 Analyse", type="primary"):
     if not raw_input.strip():
@@ -76,19 +71,21 @@ if st.button("🔍 Analyse", type="primary"):
             st.error("No valid interest rate data found. Please check the format.")
             st.info("Make sure the data includes central bank names and interest rates in percentage format.")
         else:
-            # Create rates dataframe and dictionary
-            df_rates = pd.DataFrame(rate_data, columns=["Currency", "Rate"])
+            # Create rates dictionary
             rates_dict = dict(rate_data)
             
             st.success(f"✅ Found interest rates for {len(rate_data)} currencies")
             
             # Display current rates
             with st.expander("📊 Current Interest Rates"):
+                df_rates = pd.DataFrame(list(rates_dict.items()), columns=["Currency", "Rate"])
                 st.dataframe(df_rates.sort_values("Rate", ascending=False), 
                            use_container_width=True, hide_index=True)
             
-            # Generate valid pairs and calculate differentials
-            results = []
+            # Generate results with long and short positions
+            results_long = []  # For going LONG the base currency
+            results_short = [] # For going SHORT the base currency
+            
             for pair in VALID_PAIRS:
                 base, quote = pair.split('/')
                 if base in rates_dict and quote in rates_dict:
@@ -96,67 +93,104 @@ if st.button("🔍 Analyse", type="primary"):
                     rate_quote = rates_dict[quote]
                     diff = rate_base - rate_quote
                     
-                    # Only include pairs meeting minimum differential
                     if abs(diff) >= min_differential:
-                        if diff > 0:
-                            direction = f"Long {base}/{quote}"
-                            carry_type = "Earn"
-                            recommendation = "✅ Favorable"
-                        else:
-                            direction = f"Short {base}/{quote} (Long {quote}/{base})"
-                            carry_type = "Pay"
-                            recommendation = "⚠️ Costly"
-                        
-                        results.append({
+                        # Long position (buy base, sell quote)
+                        results_long.append({
                             "Currency Pair": pair,
-                            "Trade Direction": direction,
+                            "Position": "Long",
                             "Rate Differential (%)": round(diff, 3),
-                            "Carry": carry_type,
-                            "Recommendation": recommendation,
+                            "Carry": "Earn" if diff > 0 else "Pay",
                             "Base Rate": rate_base,
-                            "Quote Rate": rate_quote
+                            "Quote Rate": rate_quote,
+                            "Description": f"Buy {base}, Sell {quote}"
+                        })
+                        
+                        # Short position (sell base, buy quote) - opposite differential
+                        results_short.append({
+                            "Currency Pair": pair,
+                            "Position": "Short", 
+                            "Rate Differential (%)": round(-diff, 3),  # Reverse the sign
+                            "Carry": "Earn" if diff < 0 else "Pay",   # Opposite of long
+                            "Base Rate": rate_base,
+                            "Quote Rate": rate_quote,
+                            "Description": f"Sell {base}, Buy {quote}"
                         })
             
-            if not results:
+            if not results_long:
                 st.warning("No pairs found meeting the minimum rate differential criteria.")
             else:
-                df_result = pd.DataFrame(results)
+                df_long = pd.DataFrame(results_long)
+                df_short = pd.DataFrame(results_short)
                 
-                # Separate favorable and costly trades
-                df_favorable = df_result[df_result["Rate Differential (%)"] > 0].sort_values(
-                    "Rate Differential (%)", ascending=False)
-                df_costly = df_result[df_result["Rate Differential (%)"] < 0].sort_values(
-                    "Rate Differential (%)", ascending=True)
+                # Show earning opportunities for both long and short
+                st.subheader("💰 Earn Interest Opportunities")
                 
-                # Display favorable trades
-                st.subheader("🎯 Favorable Carry Trades (Earn Interest)")
-                if not df_favorable.empty:
-                    st.dataframe(df_favorable[["Currency Pair", "Trade Direction", "Rate Differential (%)", "Base Rate", "Quote Rate"]], 
-                               use_container_width=True, hide_index=True)
-                else:
-                    st.info("No favorable carry trades found.")
+                # Long positions that earn
+                long_earn = df_long[df_long["Carry"] == "Earn"].sort_values("Rate Differential (%)", ascending=False)
+                # Short positions that earn  
+                short_earn = df_short[df_short["Carry"] == "Earn"].sort_values("Rate Differential (%)", ascending=False)
                 
-                # Display costly trades
-                st.subheader("⚠️ Costly Carry Trades (Pay Interest)")
-                if not df_costly.empty:
-                    st.dataframe(df_costly[["Currency Pair", "Trade Direction", "Rate Differential (%)", "Base Rate", "Quote Rate"]], 
-                               use_container_width=True, hide_index=True)
-                else:
-                    st.info("No costly carry trades found.")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**By Going LONG:**")
+                    if not long_earn.empty:
+                        st.dataframe(long_earn[["Currency Pair", "Description", "Rate Differential (%)", "Base Rate", "Quote Rate"]], 
+                                   use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No long positions earn interest")
+                        
+                with col2:
+                    st.markdown("**By Going SHORT:**")
+                    if not short_earn.empty:
+                        st.dataframe(short_earn[["Currency Pair", "Description", "Rate Differential (%)", "Base Rate", "Quote Rate"]], 
+                                   use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No short positions earn interest")
+                
+                # Show costly positions
+                st.subheader("💸 Pay Interest Positions")
+                
+                # Long positions that cost
+                long_pay = df_long[df_long["Carry"] == "Pay"].sort_values("Rate Differential (%)", ascending=True)
+                # Short positions that cost
+                short_pay = df_short[df_short["Carry"] == "Pay"].sort_values("Rate Differential (%)", ascending=True)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**By Going LONG:**")
+                    if not long_pay.empty:
+                        st.dataframe(long_pay[["Currency Pair", "Description", "Rate Differential (%)", "Base Rate", "Quote Rate"]], 
+                                   use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No long positions pay interest")
+                        
+                with col2:
+                    st.markdown("**By Going SHORT:**")  
+                    if not short_pay.empty:
+                        st.dataframe(short_pay[["Currency Pair", "Description", "Rate Differential (%)", "Base Rate", "Quote Rate"]], 
+                                   use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No short positions pay interest")
                 
                 # Summary statistics
-                col1, col2, col3 = st.columns(3)
+                st.subheader("📈 Summary")
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Total Pairs Found", len(results))
+                    st.metric("Total Opportunities", len(results_long) + len(results_short))
                 with col2:
-                    st.metric("Favorable Trades", len(df_favorable))
+                    st.metric("Earn Opportunities", len(long_earn) + len(short_earn))
                 with col3:
-                    st.metric("Costly Trades", len(df_costly))
+                    st.metric("Long Earn", len(long_earn))
+                with col4:
+                    st.metric("Short Earn", len(short_earn))
                 
                 # Download option
-                csv = df_result.to_csv(index=False)
+                all_results = pd.concat([df_long, df_short], ignore_index=True)
+                csv = all_results.to_csv(index=False)
                 st.download_button(
-                    label="📥 Download Results as CSV",
+                    label="📥 Download All Results as CSV",
                     data=csv,
                     file_name="carry_trade_analysis.csv",
                     mime="text/csv"
@@ -165,9 +199,10 @@ if st.button("🔍 Analyse", type="primary"):
 # Footer
 st.markdown("---")
 st.markdown("""
-**💡 Tips:**
-- Positive differential means you EARN interest when going long the base currency
-- Negative differential means you PAY interest when going long the base currency  
+**💡 Trading Tips:**
+- **Earn Interest**: Go LONG when base rate > quote rate, or SHORT when base rate < quote rate
+- **Pay Interest**: Go LONG when base rate < quote rate, or SHORT when base rate > quote rate  
 - Always verify actual swap rates with your broker before trading
 - Consider other factors like volatility and economic conditions
+- Higher interest rate differentials typically mean higher potential carry returns
 """)
