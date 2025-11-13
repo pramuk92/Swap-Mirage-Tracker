@@ -196,6 +196,29 @@ if st.button("🔍 Analyse", type="primary"):
                     mime="text/csv"
                 )
 
+# Suggested enhancement for your analysis
+carry_implications = {
+    "High Positive Differential (>2%)": {
+        "Trend Bias": "Bullish in risk-on environments",
+        "Risk": "Sharp reversals during risk-off",
+        "Typical Behavior": "Trends well, shallow pullbacks"
+    },
+    "Moderate Positive (0.5-2%)": {
+        "Trend Bias": "Mildly bullish",
+        "Risk": "Moderate reversal risk", 
+        "Typical Behavior": "Mixed direction, sentiment-dependent"
+    },
+    "Near Zero": {
+        "Trend Bias": "Neutral",
+        "Risk": "Low carry-related risk",
+        "Typical Behavior": "Driven by other fundamentals"
+    },
+    "Negative Differential": {
+        "Trend Bias": "Bearish in risk-on, bullish in risk-off",
+        "Risk": "Carry costs accumulate",
+        "Typical Behavior": "Often range-bound with spikes"
+    }
+}
 # Footer
 st.markdown("---")
 st.markdown("""
